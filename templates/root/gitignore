@@ -1,0 +1,45 @@
+# --- OS (Windows / Linux / macOS) ---
+Thumbs.db
+ehthumbs.db
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.lnk
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# --- IDE (VS Code / Visual Studio / JetBrains) ---
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.history/
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+.idea/
+*.iml
+
+# --- Secrets and environment ---
+.env
+.env.local
+.env.*.local
+appsettings.*.Local.json
+
+# --- Logs ---
+logs/
+*.log
+
+# Technology-specific ignores live in each subproject:
+# source/api/.gitignore, source/web/.gitignore

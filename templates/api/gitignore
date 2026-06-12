@@ -1,0 +1,11 @@
+# .NET build artifacts
+bin/
+obj/
+artifacts/
+TestResults/
+coverage*/
+*.coverage
+*.user
+
+# SonarScanner for .NET working directory
+.sonarqube/
