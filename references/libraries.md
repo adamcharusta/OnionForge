@@ -23,6 +23,7 @@
 | FluentValidation | Apache 2.0 | validation (always) |
 | Serilog + Console/File/MSSqlServer/Seq/GrafanaLoki sinks | Apache 2.0 | logging (always; Seq as a *server* has a free Individual license) |
 | xUnit, NSubstitute, Testcontainers | Apache 2.0 / BSD / MIT | tests (always) |
+| Orval | MIT | frontend API client + TanStack Query hooks generated from the backend OpenAPI document (always) |
 | EF Core, Dapper | MIT / Apache 2.0 | data access (user's choice) |
 | DbUp / grate | MIT | SQL migrations in the script-based variant |
 | Wolverine | MIT (core; paid JasperFx support/add-ons — verify when recommending) | mediator/messaging |

@@ -12,6 +12,7 @@ The generated repository follows a fixed layout (full map in [../templates/MANIF
 ├── .editorconfig
 ├── .env / .env.example
 ├── docker-compose.yml             # whole project: mssql + api + web (+ tools: Seq, SonarQube)
+├── docs/                          # project documentation in English (architecture, getting started, ADRs)
 ├── scripts/                       # bash scripts: sonar-api.sh, sonar-web.sh
 └── source/
     ├── api/
@@ -20,6 +21,8 @@ The generated repository follows a fixed layout (full map in [../templates/MANIF
     │   ├── Directory.Packages.props       # central package management
     │   ├── .gitignore / .dockerignore / Dockerfile
     │   ├── .config/dotnet-tools.json      # dotnet-sonarscanner local tool
+    │   ├── SonarQube.Analysis.xml         # scanner settings (the .NET counterpart of sonar-project.properties)
+    │   ├── openapi/                       # OpenAPI document emitted by the Api build (input for Orval)
     │   ├── src/
     │   │   ├── {Name}.Domain/             # entities, value objects, enums, domain exceptions
     │   │   ├── {Name}.Application/        # use cases, DTOs, validators, interfaces (IRepository, I*Service)
@@ -40,7 +43,7 @@ Dependency rules (enforced via project references):
 
 ## Invariant files — copy from templates
 
-`Directory.Build.props`, `.editorconfig`, root and api `.gitignore`, `.dockerignore`, `Dockerfile`, `docker-compose.yml`, `.env.example`, `appsettings.json`, the Sonar scripts, `Entity`, `DomainException`, `IDateTimeProvider`/`DateTimeProvider`, `GlobalExceptionHandler`, `ApiFactory` and the custom mediator files are ready in [../templates/](../templates/). Copy them according to [../templates/MANIFEST.md](../templates/MANIFEST.md) (placeholders and variant snippets are documented there) — do not write them from scratch.
+`Directory.Build.props`, `.editorconfig`, root and api `.gitignore`, `.dockerignore`, `Dockerfile`, `docker-compose.yml`, `.env.example`, `appsettings.json`, `SonarQube.Analysis.xml`, the Sonar scripts, `Entity`, `DomainException`, `IDateTimeProvider`/`DateTimeProvider`, `GlobalExceptionHandler`, `ApiFactory` and the custom mediator files are ready in [../templates/](../templates/). Copy them according to [../templates/MANIFEST.md](../templates/MANIFEST.md) (placeholders and variant snippets are documented there) — do not write them from scratch. `Api/Program.cs` and `Api/DependencyInjection.cs` are **adaptable** templates: copy them and add stack-specific code only at the `// EXTEND:` markers.
 
 ## Layers — what to generate
 
@@ -72,17 +75,20 @@ Dependency rules (enforced via project references):
 
 ### Api
 
+- **`DependencyInjection.cs` like every other layer** (adaptable template): `AddApi(IServiceCollection, IConfiguration)` holds all Api-layer registrations, `UseApi(WebApplication)` holds the whole pipeline + endpoint mapping. `Program.cs` (adaptable template) stays thin: Serilog + `AddApplication()`/`AddInfrastructure()`/`AddApi()` + host-level config (e.g. `UseWolverine`) + `UseApi()`.
 - Minimal APIs grouped per feature (`MapGroup`) — unless the user asks for controllers.
 - Global error handling: `IExceptionHandler` → ProblemDetails; mapping `ValidationException` → 400 with the error list, `DomainException` → 422, everything else → 500 without details.
 - Serilog: `UseSerilog` configured from `appsettings.json`; Console sink always + the chosen second sink; request logging (`UseSerilogRequestLogging`).
-- OpenAPI + Scalar/Swagger UI in Development.
+- OpenAPI + Scalar/Swagger UI in Development. The OpenAPI document is also **emitted at build time** to `source/api/openapi/` via `Microsoft.Extensions.ApiDescription.Server` (csproj setup in MANIFEST.md) — the frontend's Orval client is generated from it.
+- **Every tool with a web UI** (Scalar/Swagger, Hangfire dashboard, etc.) must be reachable when running in Development and listed with its URL in the README and `docs/development.md`.
 - CORS policy for the frontend origin (from configuration).
 - Health check: `/health` (+ a database check).
 - `appsettings.json` + `appsettings.Development.json` with the MSSQL connection string matching docker-compose.
 
 ## Docker
 
-- Root `docker-compose.yml` (template: `../templates/root/docker-compose.yml`) runs the **whole project**: MSSQL with a healthcheck, the API (built from `source/api/Dockerfile`) and the web frontend (built from `source/web/Dockerfile`). The SA password lives in `.env` — gitignored, with a provided `.env.example`. If Seq or a local SonarQube was chosen — append the services from the snippets in MANIFEST.md.
+- Root `docker-compose.yml` (template: `../templates/root/docker-compose.yml`) runs the **whole project**: MSSQL with a healthcheck, the API (built from `source/api/Dockerfile`) and the web frontend (built from `source/web/Dockerfile`). If RabbitMQ, Redis, Seq or a local SonarQube was chosen — append the services from the snippets in MANIFEST.md.
+- **All credentials and the runtime environment come from `.env`** (gitignored, with a provided `.env.example`): the SA password, credentials of every added service (RabbitMQ user/password, Redis password...) and `ASPNETCORE_ENVIRONMENT` of the api container (`${ASPNETCORE_ENVIRONMENT:-Development}` — switchable without editing the compose file). Never hardcode defaults like `guest/guest`.
 - `source/api/Dockerfile` is a multi-stage build (SDK → aspnet runtime, port 8080); `source/api/.dockerignore` keeps build context lean. Both are templates — copy, do not write.
 
 ## SonarQube
@@ -90,6 +96,7 @@ Dependency rules (enforced via project references):
 Every subproject is Sonar-ready:
 
 - `source/api/.config/dotnet-tools.json` — local tool manifest with `dotnet-sonarscanner` (create with `dotnet new tool-manifest && dotnet tool install dotnet-sonarscanner`).
+- `source/api/SonarQube.Analysis.xml` (template) — file-based scanner settings (coverage paths, exclusions). SonarScanner for .NET does not read `sonar-project.properties`; this file is its equivalent and is passed via `/s:` in the script.
 - `coverlet.collector` (MIT) in both test projects — produces opencover coverage for Sonar.
 - `scripts/sonar-api.sh` (template) runs the full cycle: scanner begin → build → tests with coverage → scanner end. Requires `SONAR_HOST_URL` and `SONAR_TOKEN` env vars; the project key is `{{solution-name-lower}}-api`.
 

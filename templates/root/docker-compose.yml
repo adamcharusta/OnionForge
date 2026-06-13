@@ -19,7 +19,7 @@ services:
     build: ./source/api
     container_name: {{solution-name-lower}}-api
     environment:
-      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
       ConnectionStrings__Database: "Server=mssql;Database={{SolutionName}};User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True"
     ports:
       - "{{ApiPort}}:8080"

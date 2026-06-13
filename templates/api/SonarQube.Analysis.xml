@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- File-based configuration for SonarScanner for .NET - the backend counterpart of the
+     frontend's sonar-project.properties (the .NET scanner does not read that format).
+     Passed to the scanner via /s: in scripts/sonar-api.sh. The project key and token
+     stay on the command line; everything else belongs here. -->
+<SonarQubeAnalysisProperties xmlns="http://www.sonarsource.com/msbuild/integration/2015/1">
+  <Property Name="sonar.sourceEncoding">UTF-8</Property>
+  <Property Name="sonar.cs.opencover.reportsPaths">**/TestResults/**/coverage.opencover.xml</Property>
+  <Property Name="sonar.coverage.exclusions">tests/**</Property>
+</SonarQubeAnalysisProperties>

@@ -7,12 +7,14 @@ cd "$(dirname "$0")/../source/api"
 
 dotnet tool restore
 
+# Analysis settings live in source/api/SonarQube.Analysis.xml (the .NET scanner
+# does not read sonar-project.properties); only key, name and secrets stay here.
 dotnet sonarscanner begin \
   /k:"{{solution-name-lower}}-api" \
   /n:"{{SolutionName}} Api" \
+  /s:"$(pwd)/SonarQube.Analysis.xml" \
   /d:sonar.host.url="$SONAR_HOST_URL" \
-  /d:sonar.token="$SONAR_TOKEN" \
-  /d:sonar.cs.opencover.reportsPaths="**/TestResults/**/coverage.opencover.xml"
+  /d:sonar.token="$SONAR_TOKEN"
 
 dotnet build --no-incremental
 

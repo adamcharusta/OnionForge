@@ -41,7 +41,7 @@ Full catalog with licenses: [references/libraries.md](../../../references/librar
 
 Ask questions as option lists with a recommendation and a short justification. If the agent has a native tool for option-based questions (e.g. AskUserQuestion in Claude Code), use it; in other agents (Codex, Copilot) ask the questions in a regular reply and wait for the user's choices.
 
-**License rule (mandatory):** before recommending any library, check its current license (NuGet/GitHub; search the web when in doubt, if you have network access). If a library is commercial or dual-license — **warn explicitly in the option description** and offer a free alternative. Known cases: MediatR, AutoMapper, FluentAssertions ≥8, MassTransit v9, Hangfire Pro, QuestPDF. Details in [references/libraries.md](../../../references/libraries.md).
+**License rule (mandatory):** before recommending any library, check its license against [references/libraries.md](../../../references/libraries.md) — that catalog is the source of truth; **search the web only for libraries not listed there or when genuinely in doubt** (do not re-verify the cataloged ones — it slows the consultation down). If a library is commercial or dual-license — **warn explicitly in the option description** and offer a free alternative. Known cases: MediatR, AutoMapper, FluentAssertions ≥8, MassTransit v9, Hangfire Pro, QuestPDF.
 
 **Fixed decisions** — always ask about:
 
@@ -81,25 +81,41 @@ Generate according to the conventions in the reference files — read them befor
 - [references/backend.md](../../../references/backend.md) — solution structure, code patterns, DI, tests,
 - [references/frontend.md](../../../references/frontend.md) — structure, configs (ESLint/Prettier/Vitest), TanStack Query.
 
-**Templates first, generation second:** the invariant files (configs, cross-cutting classes, test fixtures) are ready in [templates/](../../../templates/) — copy them according to [templates/MANIFEST.md](../../../templates/MANIFEST.md) and replace only the placeholders (`{{SolutionName}}`, `{{TargetFramework}}`, `{{ApiPort}}`...). **Do not write these files from scratch and do not modify their content** beyond the placeholders and the variant snippets from the manifest. You generate from scratch only the variable code: domain entities, the end-to-end feature, DI registrations, frontend pages.
+**Templates first, generation second:** the invariant files (configs, cross-cutting classes, test fixtures) are ready in [templates/](../../../templates/) — copy them according to [templates/MANIFEST.md](../../../templates/MANIFEST.md) and replace only the placeholders (`{{SolutionName}}`, `{{TargetFramework}}`, `{{ApiPort}}`...). **Do not write these files from scratch and do not modify their content** beyond the placeholders and the variant snippets from the manifest; files marked **adaptable** in the manifest (`Api/Program.cs`, `Api/DependencyInjection.cs`) may additionally be extended, but only at their `// EXTEND:` markers. You generate from scratch only the variable code: domain entities, the end-to-end feature, layer DI registrations, frontend pages, `docs/` content.
+
+**Encoding:** write every file as UTF-8 without BOM and keep code/config comments ASCII-only (no em-dashes or smart quotes in `.cs`/`.ts`/`.xml`/config) — see the encoding rule in the manifest. This prevents Windows mojibake.
 
 Mandatory scope:
 
-1. **Fixed project layout:** root with a general `.gitignore` (OS + IDE + secrets), `.editorconfig`, `.env.example`, a `docker-compose.yml` that runs the whole project (MSSQL + api + web + chosen tools), `scripts/` with bash scripts, and `source/` with the subprojects: `api/` (.NET), `web/` (frontend) and any other subproject the analysis justifies (e.g. a worker service).
-2. **Each subproject is self-contained:** its own technology-specific `.gitignore`, `.dockerignore` and `Dockerfile`, plus SonarQube configuration (api: dotnet-sonarscanner tool manifest + coverlet; web: `sonar-project.properties` + lcov coverage) with run scripts in `scripts/`.
-3. Backend solution under `source/api/`: layer projects (`Domain`, `Application`, `Infrastructure`, `Api`) + test projects, `Directory.Build.props`, `Directory.Packages.props`.
-4. **One end-to-end feature** derived from the business description (the most important entity): entity → repository → handler/service → validator → endpoint → frontend page with a TanStack Query hook — with a test at every level. This is the pattern the developer replicates.
-5. Cross-cutting infrastructure: global exception handler (ProblemDetails), Serilog configuration, DI registrations per layer, CORS for the frontend, health check.
-6. Frontend under `source/web/`: feature-based skeleton, API client, configuration of the chosen UI library, example page + a Vitest test.
-7. The template's `README.md`: how to run it (`docker compose up`, or database in Docker + API and frontend locally), how to run the Sonar scans, how to add the next feature following the pattern.
+1. **Fixed project layout:** root with a general `.gitignore` (OS + IDE + secrets), `.editorconfig`, `.env.example`, a `docker-compose.yml` that runs the whole project (MSSQL + api + web + chosen tools), `docs/` with project documentation, `scripts/` with bash scripts, and `source/` with the subprojects: `api/` (.NET), `web/` (frontend) and any other subproject the analysis justifies (e.g. a worker service).
+2. **Each subproject is self-contained:** its own technology-specific `.gitignore`, `.dockerignore` and `Dockerfile`, plus SonarQube configuration (api: dotnet-sonarscanner tool manifest + `SonarQube.Analysis.xml` + coverlet; web: `sonar-project.properties` + lcov coverage) with run scripts in `scripts/`.
+3. **docker-compose is fully `.env`-driven:** credentials of every service that supports them (MSSQL, RabbitMQ, Redis...) come from `.env` variables — never hardcoded defaults like `guest/guest` — and `ASPNETCORE_ENVIRONMENT` of the api container is switchable via `.env` (default `Development`). `.env.example` documents every variable.
+4. Backend solution under `source/api/`: layer projects (`Domain`, `Application`, `Infrastructure`, `Api`) + test projects, `Directory.Build.props`, `Directory.Packages.props`.
+5. **One end-to-end feature** derived from the business description (the most important entity): entity → repository → handler/service → validator → endpoint → frontend page with a TanStack Query hook — with a test at every level. This is the pattern the developer replicates.
+6. Cross-cutting infrastructure: global exception handler (ProblemDetails), Serilog configuration, **DI registrations per layer including the Api layer** (`AddApi`/`UseApi` in its own `DependencyInjection.cs`; `Program.cs` contains only the composition calls — both are adaptable templates), CORS for the frontend, health check.
+7. **Tool UIs exposed in Development:** every chosen tool that ships a web UI (Scalar/Swagger, Hangfire dashboard, RabbitMQ management, Seq, SonarQube...) must be reachable when running in Development, with its URL and credentials source (`.env` variable names) listed in `README.md` and `docs/development.md`.
+8. Frontend under `source/web/`: feature-based skeleton, **API client + TanStack Query hooks generated with Orval** from the OpenAPI document emitted by the backend build (`npm run api:generate`, hooked as `predev`; the generated output is committed), configuration of the chosen UI library, example page + a Vitest test.
+9. **`docs/` with the initial project documentation, written in English:** `docs/architecture.md` (Onion layers, the chosen stack with licenses, how the pieces talk to each other), `docs/getting-started.md` (prerequisites, first run), `docs/development.md` (ports, tool UIs, `.env` variables, Sonar scans, regenerating the API client) and `docs/adr/0001-technology-stack.md` recording the consultation decisions with their rationale.
+10. The template's `README.md`: how to run it (`docker compose up`, or database in Docker + API and frontend locally), the tool UI list, how to run the Sonar scans, how to add the next feature following the pattern, and a pointer to `docs/`.
 
 ### Step 6 — Verification
 
-The template must build and pass tests — fix all errors before you finish:
+The template must build and pass tests — fix all errors before you finish. **Run the verification once, at the end of generation** (don't re-run full builds and test suites after every intermediate change — it dominates the generation time); after a fix, re-run only the failed step.
 
-1. `dotnet build` — no errors and no warnings (TreatWarningsAsErrors).
+1. `dotnet build` — no errors and no warnings (TreatWarningsAsErrors). The build also emits `source/api/openapi/*.json` — the input for step 3.
 2. `dotnet test` — unit tests always; integration tests (Testcontainers) only when Docker is available — if it is not, note that in the report.
-3. Frontend: `npm run lint`, `npm run test`, `npm run build`.
+3. Frontend: `npm run api:generate` (after the backend build), then `npm run lint`, `npm run test`, `npm run build`.
 4. When Docker is available: `docker compose build` — both Dockerfiles must build successfully.
 
-Finish with a report: what was generated, which stack was chosen, and where the developer should start implementing the business requirements.
+### Step 7 — Initialize git
+
+After verification passes, initialize a repository in the project root so the template is ready to push to GitHub/Bitbucket/etc.:
+
+1. `git init -b main` in the project root.
+2. Confirm `.gitignore` and `.gitattributes` are present (copied from the templates) so line endings and ignores apply from the first commit — the `.gitattributes` keeps the whole project on one line-ending/encoding style across platforms.
+3. `git add -A` then `git commit -m "first commit"`.
+4. Do **not** add a remote or push — leave that to the developer. Mention in the final report that the repository is initialized with one commit and ready to connect to a remote (`git remote add origin <url> && git push -u origin main`).
+
+If the project directory is already inside an existing git repository (e.g. a monorepo), skip `git init` and just stage and commit the generated files instead.
+
+Finish with a report: what was generated, which stack was chosen, where the developer should start implementing the business requirements, and that the repo is initialized with a `first commit` ready for a remote.
