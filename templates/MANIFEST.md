@@ -64,6 +64,7 @@ Files that start with a dot in the target project are stored here **without the 
 | `api/Dockerfile` | `source/api/Dockerfile` | DotnetVersion, SolutionName |
 | `api/Directory.Build.props` | `source/api/Directory.Build.props` | TargetFramework |
 | `api/SonarQube.Analysis.xml` | `source/api/SonarQube.Analysis.xml` | — |
+| `api/coverlet.runsettings` | `source/api/coverlet.runsettings` | — |
 | `api/Api/Program.cs` | `source/api/src/{{SolutionName}}.Api/Program.cs` (**adaptable** — extend only at `// EXTEND:` markers) | SolutionName |
 | `api/Api/DependencyInjection.cs` | `source/api/src/{{SolutionName}}.Api/DependencyInjection.cs` (**adaptable** — extend only at `// EXTEND:` markers) | SolutionName |
 | `api/Domain/Common/Entity.cs` | `source/api/src/{{SolutionName}}.Domain/Common/` | SolutionName |

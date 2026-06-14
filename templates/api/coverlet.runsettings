@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shared coverage settings for "dotnet test". Used locally and by scripts/sonar-api.sh
+     (pass it with the settings option). Emits OpenCover, the format Sonar reads via
+     sonar.cs.opencover.reportsPaths in SonarQube.Analysis.xml. -->
+<RunSettings>
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="XPlat Code Coverage">
+        <Configuration>
+          <Format>opencover</Format>
+          <!-- Generated and composition-only code does not need coverage. -->
+          <ExcludeByFile>**/Migrations/**/*.cs,**/Program.cs</ExcludeByFile>
+          <ExcludeByAttribute>GeneratedCodeAttribute,CompilerGeneratedAttribute,ExcludeFromCodeCoverage</ExcludeByAttribute>
+          <SkipAutoProps>true</SkipAutoProps>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+</RunSettings>

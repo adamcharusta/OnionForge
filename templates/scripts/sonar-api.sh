@@ -18,8 +18,7 @@ dotnet sonarscanner begin \
 
 dotnet build --no-incremental
 
-dotnet test --no-build \
-  --collect:"XPlat Code Coverage" \
-  -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+# Coverage settings (OpenCover format, exclusions) live in coverlet.runsettings.
+dotnet test --no-build --settings coverlet.runsettings
 
 dotnet sonarscanner end /d:sonar.token="$SONAR_TOKEN"

@@ -16,12 +16,13 @@ The generated repository follows a fixed layout (full map in [../templates/MANIF
 ├── scripts/                       # bash scripts: sonar-api.sh, sonar-web.sh
 └── source/
     ├── api/
-    │   ├── {Name}.sln
+    │   ├── {Name}.slnx                    # XML solution file (see "Solution file" below)
     │   ├── Directory.Build.props          # shared settings for all projects
     │   ├── Directory.Packages.props       # central package management
     │   ├── .gitignore / .dockerignore / Dockerfile
     │   ├── .config/dotnet-tools.json      # dotnet-sonarscanner local tool
     │   ├── SonarQube.Analysis.xml         # scanner settings (the .NET counterpart of sonar-project.properties)
+    │   ├── coverlet.runsettings           # shared coverage settings (OpenCover) for dotnet test
     │   ├── openapi/                       # OpenAPI document emitted by the Api build (input for Orval)
     │   ├── src/
     │   │   ├── {Name}.Domain/             # entities, value objects, enums, domain exceptions
@@ -41,9 +42,47 @@ Dependency rules (enforced via project references):
 - `Infrastructure` → `Application`,
 - `Api` → `Application` + `Infrastructure` (for DI registration only).
 
+## Solution file (`.slnx`)
+
+Generate `source/api/{Name}.slnx` (the modern XML solution format) from scratch with **three folders**:
+
+- `/src/` — the four layer projects (`Domain`, `Application`, `Infrastructure`, `Api`).
+- `/tests/` — the test projects (`UnitTests`, `IntegrationTests`).
+- `/solutionItems/` — the api-root **non-project files**, so they are visible and editable in the
+  IDE solution explorer (Rider / Visual Studio) instead of being hidden on disk: `.dockerignore`,
+  `.gitignore`, `Directory.Build.props`, `Directory.Packages.props`, `Dockerfile`,
+  `SonarQube.Analysis.xml`, `coverlet.runsettings`.
+
+```xml
+<Solution>
+  <Folder Name="/solutionItems/">
+    <File Path=".dockerignore" />
+    <File Path=".gitignore" />
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Packages.props" />
+    <File Path="Dockerfile" />
+    <File Path="SonarQube.Analysis.xml" />
+    <File Path="coverlet.runsettings" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/{Name}.Api/{Name}.Api.csproj" />
+    <Project Path="src/{Name}.Application/{Name}.Application.csproj" />
+    <Project Path="src/{Name}.Domain/{Name}.Domain.csproj" />
+    <Project Path="src/{Name}.Infrastructure/{Name}.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/{Name}.IntegrationTests/{Name}.IntegrationTests.csproj" />
+    <Project Path="tests/{Name}.UnitTests/{Name}.UnitTests.csproj" />
+  </Folder>
+</Solution>
+```
+
+Add any extra api-root file the consultation introduces (e.g. another `*.props`) to `/solutionItems/`,
+and any extra project (e.g. a Worker) to `/src/`.
+
 ## Invariant files — copy from templates
 
-`Directory.Build.props`, `.editorconfig`, root and api `.gitignore`, `.dockerignore`, `Dockerfile`, `docker-compose.yml`, `.env.example`, `appsettings.json`, `SonarQube.Analysis.xml`, the Sonar scripts, `Entity`, `DomainException`, `IDateTimeProvider`/`DateTimeProvider`, `GlobalExceptionHandler`, `ApiFactory` and the custom mediator files are ready in [../templates/](../templates/). Copy them according to [../templates/MANIFEST.md](../templates/MANIFEST.md) (placeholders and variant snippets are documented there) — do not write them from scratch. `Api/Program.cs` and `Api/DependencyInjection.cs` are **adaptable** templates: copy them and add stack-specific code only at the `// EXTEND:` markers.
+`Directory.Build.props`, `.editorconfig`, root and api `.gitignore`, `.dockerignore`, `Dockerfile`, `docker-compose.yml`, `.env.example`, `appsettings.json`, `SonarQube.Analysis.xml`, `coverlet.runsettings`, the Sonar scripts, `Entity`, `DomainException`, `IDateTimeProvider`/`DateTimeProvider`, `GlobalExceptionHandler`, `ApiFactory` and the custom mediator files are ready in [../templates/](../templates/). Copy them according to [../templates/MANIFEST.md](../templates/MANIFEST.md) (placeholders and variant snippets are documented there) — do not write them from scratch. `Api/Program.cs` and `Api/DependencyInjection.cs` are **adaptable** templates: copy them and add stack-specific code only at the `// EXTEND:` markers.
 
 ## Layers — what to generate
 
@@ -97,8 +136,9 @@ Every subproject is Sonar-ready:
 
 - `source/api/.config/dotnet-tools.json` — local tool manifest with `dotnet-sonarscanner` (create with `dotnet new tool-manifest && dotnet tool install dotnet-sonarscanner`).
 - `source/api/SonarQube.Analysis.xml` (template) — file-based scanner settings (coverage paths, exclusions). SonarScanner for .NET does not read `sonar-project.properties`; this file is its equivalent and is passed via `/s:` in the script.
-- `coverlet.collector` (MIT) in both test projects — produces opencover coverage for Sonar.
-- `scripts/sonar-api.sh` (template) runs the full cycle: scanner begin → build → tests with coverage → scanner end. Requires `SONAR_HOST_URL` and `SONAR_TOKEN` env vars; the project key is `{{solution-name-lower}}-api`.
+- `coverlet.collector` (MIT) in both test projects — produces coverage for Sonar.
+- `source/api/coverlet.runsettings` (template) — shared coverage config (OpenCover format, exclusions for `Migrations/` and `Program.cs`). Run coverage locally with `dotnet test --settings coverlet.runsettings`; the OpenCover path matches `sonar.cs.opencover.reportsPaths` in `SonarQube.Analysis.xml`.
+- `scripts/sonar-api.sh` (template) runs the full cycle: scanner begin → build → `dotnet test --settings coverlet.runsettings` → scanner end. Requires `SONAR_HOST_URL` and `SONAR_TOKEN` env vars; the project key is `{{solution-name-lower}}-api`.
 
 ## Tests
 
