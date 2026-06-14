@@ -62,6 +62,17 @@ Ask questions as option lists with a recommendation and a short justification. I
    - Seq, rolling file, MSSQL, Grafana Loki.
 5. **Frontend UI:** Tailwind CSS vs MUI.
 6. **SonarQube:** existing instance / SonarCloud (only env vars needed) vs a local `sonarqube:community` container added to docker-compose (⚠ resource-heavy). Sonar configuration itself is always generated for both subprojects — this question is only about where the server runs.
+7. **Commit & versioning workflow** (cumulative tiers; **default tier 1** — present all and recommend tier 1):
+   - **None** — plain git (the project still gets `.gitattributes` and the `first commit`).
+   - **Tier 1 — Conventional Commits + git hooks** (recommended): `commit-msg` lint + `pre-commit` format, local, cross-platform, no CI coupling.
+   - **Tier 2 — + MinVer** tag-based SemVer for .NET and the web app version from the same git tag.
+   - **Tier 3 — + Release Please** GitHub Actions automation (auto bump, CHANGELOG, tag, release). ⚠ couples the repo to GitHub Actions.
+
+   **When tier 1+ is chosen, also ask the hook runner:**
+   - **Husky.Net** (recommended) — a .NET tool; no extra Node, no root `package.json`; commit linting via a bundled `.csx` script.
+   - **Classic Husky (Node)** — the npm ecosystem (husky + commitlint + lint-staged); ⚠ adds a small root `package.json`/`node_modules` because git hooks live at the repo root while Node otherwise lives only in `source/web`.
+
+   Both enforce the same Conventional Commits rules; pick by which ecosystem the team prefers. All tools are free / permissive (Conventional Commits, Husky.Net, Husky, commitlint, MinVer, Release Please). Full setup, files and snippets per tier and per hook runner: [references/versioning.md](../../../references/versioning.md).
 
 **Dynamic decisions** — questions derived from the step 2 analysis (backend and frontend), each proposal with a short business justification and license info. For the frontend, analyze which libraries fit the domain (forms → react-hook-form + zod; tables → TanStack Table; charts → Recharts; routing → React Router; etc. — catalog in libraries.md) and ask about them.
 
@@ -79,7 +90,8 @@ Present a concise summary: the chosen stack (with licenses), the solution struct
 Generate according to the conventions in the reference files — read them before starting:
 
 - [references/backend.md](../../../references/backend.md) — solution structure, code patterns, DI, tests,
-- [references/frontend.md](../../../references/frontend.md) — structure, configs (ESLint/Prettier/Vitest), TanStack Query.
+- [references/frontend.md](../../../references/frontend.md) — structure, configs (ESLint/Prettier/Vitest), TanStack Query,
+- [references/versioning.md](../../../references/versioning.md) — commit & versioning workflow tiers (only when tier 1+ was chosen).
 
 **Templates first, generation second:** the invariant files (configs, cross-cutting classes, test fixtures) are ready in [templates/](../../../templates/) — copy them according to [templates/MANIFEST.md](../../../templates/MANIFEST.md) and replace only the placeholders (`{{SolutionName}}`, `{{TargetFramework}}`, `{{ApiPort}}`...). **Do not write these files from scratch and do not modify their content** beyond the placeholders and the variant snippets from the manifest; files marked **adaptable** in the manifest (`Api/Program.cs`, `Api/DependencyInjection.cs`) may additionally be extended, but only at their `// EXTEND:` markers. You generate from scratch only the variable code: domain entities, the end-to-end feature, layer DI registrations, frontend pages, `docs/` content.
 
@@ -113,8 +125,9 @@ After verification passes, initialize a repository in the project root so the te
 
 1. `git init -b main` in the project root.
 2. Confirm `.gitignore` and `.gitattributes` are present (copied from the templates) so line endings and ignores apply from the first commit — the `.gitattributes` keeps the whole project on one line-ending/encoding style across platforms.
-3. `git add -A` then `git commit -m "first commit"`.
-4. Do **not** add a remote or push — leave that to the developer. Mention in the final report that the repository is initialized with one commit and ready to connect to a remote (`git remote add origin <url> && git push -u origin main`).
+3. **If a commit & versioning tier was chosen** (Step 3, decision 7), set it up now, before committing, per [references/versioning.md](../../../references/versioning.md). Tier 1+ depends on the chosen hook runner: **Husky.Net** → `dotnet new tool-manifest` / `dotnet tool install husky` / `dotnet husky install`, then copy `git/husky/` files; **classic Husky** → copy `git/husky-node/package.json` + configs to the root, `npm install` (its `prepare` runs `husky`), then copy `git/husky-node/` hooks. (Tier 2 MinVer and tier 3 Release Please files are added during generation, not here.)
+4. `git add -A` then commit. The required message `first commit` is **not** a Conventional Commit, so when the tier-1 `commit-msg` hook is installed, bypass it for this one scaffold commit: `git commit --no-verify -m "first commit"`. Without hooks, plain `git commit -m "first commit"`. The hook applies from the second commit on.
+5. Do **not** add a remote or push — leave that to the developer. Mention in the final report that the repository is initialized with one commit and ready to connect to a remote (`git remote add origin <url> && git push -u origin main`).
 
 If the project directory is already inside an existing git repository (e.g. a monorepo), skip `git init` and just stage and commit the generated files instead.
 

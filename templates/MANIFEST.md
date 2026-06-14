@@ -114,6 +114,21 @@ Every `dotnet build` then refreshes `source/api/openapi/{{SolutionName}}.Api.jso
 | Template | Condition |
 |---|---|
 | `api/mediator-custom/Messaging/*.cs` → `source/api/src/{{SolutionName}}.Application/Messaging/` | the **own mediator implementation** was chosen (requires the Scrutor package) |
+| `git/husky/task-runner.json` → `.husky/task-runner.json` (placeholder: SolutionName) | tier 1+ **and** hook runner = **Husky.Net** |
+| `git/husky/commit-lint.csx` → `.husky/csx/commit-lint.csx` | tier 1+ **and** hook runner = **Husky.Net** |
+| `git/husky/commit-msg` → `.husky/commit-msg` | tier 1+ **and** hook runner = **Husky.Net** |
+| `git/husky/pre-commit` → `.husky/pre-commit` | tier 1+ **and** hook runner = **Husky.Net** |
+| `git/husky-node/package.json` → `package.json` (root; placeholders: solution-name-lower, SolutionName via lintstagedrc) | tier 1+ **and** hook runner = **classic Husky** |
+| `git/husky-node/commitlint.config.js` → `commitlint.config.js` | tier 1+ **and** hook runner = **classic Husky** |
+| `git/husky-node/lintstagedrc.mjs` → `.lintstagedrc.mjs` (placeholder: SolutionName) | tier 1+ **and** hook runner = **classic Husky** |
+| `git/husky-node/commit-msg` → `.husky/commit-msg` | tier 1+ **and** hook runner = **classic Husky** |
+| `git/husky-node/pre-commit` → `.husky/pre-commit` | tier 1+ **and** hook runner = **classic Husky** |
+| MinVer snippet (see [references/versioning.md](../references/versioning.md)) → `source/api/Directory.Build.props` + `Directory.Packages.props` | commit & versioning **tier 2+** chosen |
+| `git/release-please/workflow.yml` → `.github/workflows/release-please.yml` | commit & versioning **tier 3** chosen |
+| `git/release-please/release-please-config.json` → `release-please-config.json` (placeholder: solution-name-lower) | commit & versioning **tier 3** chosen |
+| `git/release-please/release-please-manifest.json` → `.release-please-manifest.json` | commit & versioning **tier 3** chosen |
+
+Full per-tier setup (Husky install commands, MinVer snippet, scaffold-commit `--no-verify`): [references/versioning.md](../references/versioning.md).
 
 ## Variant snippets
 
