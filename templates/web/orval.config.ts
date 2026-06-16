@@ -15,6 +15,11 @@ export default defineConfig({
       clean: true,
       prettier: true,
       override: {
+        // The mutator returns the parsed response body, so generated types must not
+        // wrap it in { data, status, headers }.
+        fetch: {
+          includeHttpResponseReturnType: false,
+        },
         mutator: {
           path: 'src/api/client.ts',
           name: 'api',

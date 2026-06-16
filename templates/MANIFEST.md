@@ -153,11 +153,15 @@ MSSQL (package `Serilog.Sinks.MSSqlServer`):
 { "Name": "MSSqlServer", "Args": { "connectionString": "<same as ConnectionStrings:Database>", "sinkOptionsSection": { "tableName": "Logs", "autoCreateSqlTable": true } } }
 ```
 
+⚠ This sink hardcodes its own `connectionString` in `appsettings.json` — it does **not** reuse `ConnectionStrings:Database`. The `appsettings.json` value points at `localhost`, which is correct only when the api runs on the host. When the api runs in the compose network, override it there too (`Serilog__WriteTo__1__Args__connectionString` pointing at `Server=mssql;...`), exactly like the `ConnectionStrings__Database` override — otherwise the sink silently fails to write logs from inside Docker.
+
 Grafana Loki (package `Serilog.Sinks.Grafana.Loki`):
 
 ```json
 { "Name": "GrafanaLoki", "Args": { "uri": "http://localhost:3100" } }
 ```
+
+⚠ Loki is a **separate server**, like Seq — picking this sink requires adding the Loki + Grafana services to `docker-compose.yml` (snippet below), or logs go nowhere. In-network the api targets `http://loki:3100`; on the host it is `http://localhost:3100`.
 
 ### Services with credentials — append to `docker-compose.yml` when chosen
 
@@ -169,6 +173,7 @@ RabbitMQ (variables: `RABBITMQ_USER`, `RABBITMQ_PASSWORD`; api connection string
   rabbitmq:
     image: rabbitmq:4-management-alpine
     container_name: {{solution-name-lower}}-rabbitmq
+    restart: unless-stopped
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
@@ -180,7 +185,11 @@ RabbitMQ (variables: `RABBITMQ_USER`, `RABBITMQ_PASSWORD`; api connection string
       interval: 10s
       timeout: 5s
       retries: 10
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
 ```
+
+(add `rabbitmq-data` to the top-level `volumes:`) The volume keeps durable queues and undelivered messages across restarts; without it every `docker compose down`/recreate empties the broker. The management UI (`http://localhost:15672`) authenticates with `RABBITMQ_USER`/`RABBITMQ_PASSWORD`, so it is reachable from the host — no extra auth filter needed.
 
 Redis (variable: `REDIS_PASSWORD`; api connection string: `redis:6379,password=${REDIS_PASSWORD}`):
 
@@ -188,22 +197,37 @@ Redis (variable: `REDIS_PASSWORD`; api connection string: `redis:6379,password=$
   redis:
     image: redis:7-alpine
     container_name: {{solution-name-lower}}-redis
+    restart: unless-stopped
     command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
     ports:
       - "6379:6379"
 ```
 
+No volume here is intentional: Redis is used as a cache, so losing its contents on restart is harmless (the app repopulates it). If the consultation makes Redis a source of truth rather than a cache, add `redis-data:/data` plus a persistence flag (`--appendonly yes`).
+
 ### Seq service — append to `docker-compose.yml` when Seq was chosen
 
 ```yaml
   seq:
-    image: datalust/seq:latest
+    image: datalust/seq:2025.2
     container_name: {{solution-name-lower}}-seq
+    restart: unless-stopped
     environment:
       ACCEPT_EULA: "Y"
     ports:
       - "5341:80"
+    volumes:
+      - seq-data:/data
 ```
+
+(remember to add `seq-data` to the top-level `volumes:`)
+
+**The `seq-data` volume is mandatory, not optional.** Seq keeps its Flare/LMDB storage in `/data`; without a persistent volume an unclean container shutdown (a plain `docker compose down`/recreate) corrupts that storage and Seq then crashes on the next start with an Autofac `StorageSubsystem` activation error. Pin a concrete version (not `latest`) for reproducible builds.
+
+Seq listens on **port 80** (UI + API + ingestion) and on **5341** (ingestion-only) inside the container; `5341:80` maps the host's `5341` to the container UI. So the Serilog `serverUrl` differs by where the api runs:
+
+- **api on the host** (local dev, default `appsettings.json`): `http://localhost:5341`.
+- **api in the compose network** (override in the api service env): `http://seq` (the in-network UI/ingestion port 80) — set it with `Serilog__WriteTo__1__Args__serverUrl: "http://seq"` on the `api` service. Do **not** use `http://seq:5341` here; that targets the ingestion-only port, not the one the host mapping documents.
 
 ### SonarQube server — append to `docker-compose.yml` when the user wants a local Sonar instance
 
@@ -223,6 +247,96 @@ Ask during the consultation whether the team has an existing SonarQube/SonarClou
 ```
 
 (remember to add `sonarqube-data` and `sonarqube-extensions` to `volumes:`)
+
+### Grafana Loki stack — append to `docker-compose.yml` when the Grafana Loki sink was chosen
+
+The Loki sink needs a Loki server to receive logs and Grafana to read them (Loki has no UI of its own). Grafana is exposed on host port **3001** because the web app already uses 3000:
+
+```yaml
+  loki:
+    image: grafana/loki:3.5
+    container_name: {{solution-name-lower}}-loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/local-config.yaml
+    ports:
+      - "3100:3100"
+    volumes:
+      - loki-data:/loki
+
+  grafana:
+    image: grafana/grafana:11.6
+    container_name: {{solution-name-lower}}-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}
+    ports:
+      - "3001:3000"
+    depends_on:
+      - loki
+    volumes:
+      - grafana-data:/var/lib/grafana
+```
+
+(add `loki-data` and `grafana-data` to the top-level `volumes:`, and `GRAFANA_PASSWORD` to `.env` + `.env.example`). Grafana UI on `http://localhost:3001` (login `admin` / `GRAFANA_PASSWORD`); add Loki as a data source pointed at `http://loki:3100`. List both in `README.md` and `docs/development.md`.
+
+### Background processing — Hangfire — when Hangfire was chosen
+
+Hangfire reuses the **existing MSSQL** for job storage, so it needs **no extra docker-compose service** — only packages, DI registration and a dashboard mapping. Packages (add to `Directory.Packages.props` + the Infrastructure `.csproj`): `Hangfire.AspNetCore`, `Hangfire.SqlServer`.
+
+**Infrastructure `DependencyInjection.cs`** — register the storage and the server (gate them behind `Hangfire:Enabled` so integration tests and build-time OpenAPI generation, which have no live SQL, can switch them off):
+
+```csharp
+// AddInfrastructure(...), after the DbContext is registered:
+if (configuration.GetValue("Hangfire:Enabled", true))
+{
+    services.AddHangfire(config => config
+        .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+        .UseSimpleAssemblyNameTypeSerializer()
+        .UseRecommendedSerializerSettings()
+        .UseSqlServerStorage(connectionString, new SqlServerStorageOptions
+        {
+            PrepareSchemaIfNecessary = true,
+            QueuePollInterval = TimeSpan.FromSeconds(15),
+        }));
+    services.AddHangfireServer();
+}
+```
+
+**Api `DependencyInjection.cs`** — map the dashboard at the `// EXTEND:` pipeline marker in `UseApi`. The dashboard must be mapped with an **explicit authorization filter**: the default `MapHangfireDashboard("/hangfire")` applies `LocalRequestsOnlyAuthorizationFilter`, which returns **403** for every request that is not local — so when the api runs in Docker and you open the dashboard from the host browser, it is blocked. That is the usual "no access to Hangfire" symptom. Map it only in Development with a filter that allows the request:
+
+```csharp
+if (app.Environment.IsDevelopment() && app.Configuration.GetValue("Hangfire:Enabled", true))
+{
+    app.MapHangfireDashboard("/hangfire", new DashboardOptions
+    {
+        Authorization = [new AllowAllDashboardAuthorizationFilter()],
+    });
+}
+```
+
+```csharp
+// Api/Dashboards/AllowAllDashboardAuthorizationFilter.cs
+using Hangfire.Dashboard;
+
+namespace {{SolutionName}}.Api.Dashboards;
+
+// Development only: the dashboard is mapped solely under IsDevelopment(), so allowing
+// every request makes it reachable from the host browser when the api runs in Docker
+// (the default LocalRequestsOnlyAuthorizationFilter blocks non-local requests). For a
+// Production dashboard, replace this with a real auth check.
+internal sealed class AllowAllDashboardAuthorizationFilter : IDashboardAuthorizationFilter
+{
+    public bool Authorize(DashboardContext context) => true;
+}
+```
+
+**`appsettings.json`** — add the toggle the registrations read:
+
+```json
+"Hangfire": { "Enabled": true }
+```
+
+Schedule recurring jobs (`RecurringJob.AddOrUpdate`) from an `IHostedService` that runs at startup, not during build-time OpenAPI generation — see the `Hangfire:Enabled` gating pattern in [../references/backend.md](../references/backend.md). The dashboard URL (`/hangfire`) goes in `README.md` and `docs/development.md`.
 
 ### Frontend `package.json` scripts — set exactly like this
 

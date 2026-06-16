@@ -119,7 +119,7 @@ and any extra project (e.g. a Worker) to `/src/`.
 - Global error handling: `IExceptionHandler` → ProblemDetails; mapping `ValidationException` → 400 with the error list, `DomainException` → 422, everything else → 500 without details.
 - Serilog: `UseSerilog` configured from `appsettings.json`; Console sink always + the chosen second sink; request logging (`UseSerilogRequestLogging`).
 - OpenAPI + Scalar/Swagger UI in Development. The OpenAPI document is also **emitted at build time** to `source/api/openapi/` via `Microsoft.Extensions.ApiDescription.Server` (csproj setup in MANIFEST.md) — the frontend's Orval client is generated from it.
-- **Every tool with a web UI** (Scalar/Swagger, Hangfire dashboard, etc.) must be reachable when running in Development and listed with its URL in the README and `docs/development.md`.
+- **Every tool with a web UI** (Scalar/Swagger, Hangfire dashboard, etc.) must be reachable when running in Development and listed with its URL in the README and `docs/development.md`. Map dashboards only under `IsDevelopment()`. A dashboard with local-only default authorization (the **Hangfire dashboard** uses `LocalRequestsOnlyAuthorizationFilter`) returns 403 from a host browser when the api runs in Docker — map it with an explicit Development authorization filter (snippet in [../templates/MANIFEST.md](../templates/MANIFEST.md)).
 - CORS policy for the frontend origin (from configuration).
 - Health check: `/health` (+ a database check).
 - `appsettings.json` + `appsettings.Development.json` with the MSSQL connection string matching docker-compose.
@@ -127,8 +127,43 @@ and any extra project (e.g. a Worker) to `/src/`.
 ## Docker
 
 - Root `docker-compose.yml` (template: `../templates/root/docker-compose.yml`) runs the **whole project**: MSSQL with a healthcheck, the API (built from `source/api/Dockerfile`) and the web frontend (built from `source/web/Dockerfile`). If RabbitMQ, Redis, Seq or a local SonarQube was chosen — append the services from the snippets in MANIFEST.md.
+- **Stateful tool containers need a persistent volume**, or they crash on restart. Seq keeps its Flare/LMDB storage in `/data`; without a `seq-data:/data` volume an unclean shutdown corrupts it and Seq then fails to boot with an Autofac `StorageSubsystem` error. Pin concrete image tags (not `latest`) for these tools. The MANIFEST snippets already include the required volumes — keep them.
 - **All credentials and the runtime environment come from `.env`** (gitignored, with a provided `.env.example`): the SA password, credentials of every added service (RabbitMQ user/password, Redis password...) and `ASPNETCORE_ENVIRONMENT` of the api container (`${ASPNETCORE_ENVIRONMENT:-Development}` — switchable without editing the compose file). Never hardcode defaults like `guest/guest`.
 - `source/api/Dockerfile` is a multi-stage build (SDK → aspnet runtime, port 8080); `source/api/.dockerignore` keeps build context lean. Both are templates — copy, do not write.
+
+### Docker-readiness rules for every chosen service
+
+Apply these to **any** service you add to the compose file, including ones that have no ready snippet (a self-hosted IdP like Keycloak, a search engine, etc.) — the result must run cleanly from a single `docker compose up`:
+
+1. **Stateful → persistent volume.** Anything that stores data (Seq, RabbitMQ, SonarQube, Loki, Grafana, Keycloak's DB...) gets a named volume, or it loses data or corrupt-crashes on the next restart. A pure cache (Redis as a cache) is the only exception.
+2. **Pin the image tag** to a concrete version (`datalust/seq:2025.2`, not `:latest`) so the build is reproducible and a server crash is never just "latest changed under us".
+3. **The api addresses other services by their compose service name, not `localhost`.** `appsettings.json` carries the `localhost` form (correct when the api runs on the host); the compose `api` service overrides each address to the in-network name via env vars (`ConnectionStrings__Database` → `Server=mssql;...`, `Serilog__WriteTo__1__Args__serverUrl` → `http://seq`, the Loki `uri` → `http://loki:3100`, etc.). A `localhost` address that is not overridden silently fails from inside the container — this hits log sinks (Seq/Loki/MSSQL) the hardest because they fail quietly.
+4. **Every tool UI must actually open in Development** (see the Api section): expose its port, and if its dashboard defaults to local-only authorization (Hangfire), map it with an explicit Development auth filter so it is reachable from the host browser when the api runs in Docker.
+5. **Credentials from `.env`** (next bullet) for every service that authenticates, mirrored in `.env.example`.
+
+### Service URLs section in the generated README
+
+The generated `README.md` **must** contain a **"Service URLs"** table (repeat it, or link to it, from `docs/development.md`). Build it from the project's own `docker-compose.yml` and `appsettings.json` — one row per service/UI that the chosen stack actually includes, never a row for a tool that was not selected. This is what makes the output ready-to-use: one place with every link and where its credentials come from. Use this canonical catalog and keep only the applicable rows (`{ApiPort}` = the api port from `launchSettings.json`/compose):
+
+| Service / UI | URL (Development) | Credentials |
+|---|---|---|
+| Web app (frontend) | `http://localhost:3000` (Docker) · `http://localhost:5173` (vite dev) | — |
+| API | `http://localhost:{ApiPort}` | — |
+| OpenAPI / Scalar reference | `http://localhost:{ApiPort}/scalar/v1` | — |
+| Health check | `http://localhost:{ApiPort}/health` | — |
+| Hangfire dashboard | `http://localhost:{ApiPort}/hangfire` | open in Development (AllowAll dashboard filter) |
+| Seq | `http://localhost:5341` | none by default (or the first-run admin password if set) |
+| RabbitMQ management | `http://localhost:15672` | `RABBITMQ_USER` / `RABBITMQ_PASSWORD` (`.env`) |
+| Grafana (Loki logs) | `http://localhost:3001` | `admin` / `GRAFANA_PASSWORD` (`.env`) |
+| SonarQube (local container) | `http://localhost:9000` | `admin` / `admin` on first login |
+| MSSQL | `localhost,1433` | `sa` / `MSSQL_SA_PASSWORD` (`.env`) |
+| Redis | `localhost:6379` | `REDIS_PASSWORD` (`.env`) |
+
+Rules for the table:
+
+- Include only services present in the generated `docker-compose.yml` (plus the always-on API/Scalar/health and the web app).
+- The credentials column names the **`.env` variable**, never a literal secret.
+- All UI rows are the **Development** addresses; note in the surrounding text that the tool dashboards are exposed only when `ASPNETCORE_ENVIRONMENT=Development`.
 
 ## SonarQube
 
