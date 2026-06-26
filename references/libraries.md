@@ -1,6 +1,13 @@
 # Library and license catalog
 
-**Overriding rule:** package licenses change (the OSS commercialization wave in the .NET ecosystem, 2023–2025). Treat the state below as a starting point — when recommending, **verify the current license** on NuGet/GitHub (search the web when in doubt, if the agent has network access) and warn the user explicitly if a library is paid or dual-license.
+**Source-of-truth rule (must match [SKILL.md](../.agents/skills/onionforge/SKILL.md) — keep the two in sync):**
+
+- **This catalog is the default source of truth** for the libraries it lists. The OSS commercialization wave in the .NET ecosystem (2023–2025) is the reason it exists — the known cases below are already captured.
+- **Do not re-verify a cataloged library** that is here and not in doubt — re-checking every popular package online slows the consultation down for no benefit.
+- **For libraries not in this catalog**, verify the current license on NuGet/GitHub when the agent has internet access.
+- **Always warn the user** when a library is commercial, open-core, dual-license, revenue-dependent, has restrictions on free use, or otherwise needs legal attention — regardless of whether it is cataloged.
+- **If the user explicitly asks for a fresh license check**, perform it (with internet access).
+- **If the agent has no internet access**, say so plainly: the recommendation rests on this local catalog and the current upstream license state cannot be confirmed.
 
 ## ⚠ Known commercialization cases
 

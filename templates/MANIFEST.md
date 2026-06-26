@@ -214,6 +214,10 @@ No volume here is intentional: Redis is used as a cache, so losing its contents 
     restart: unless-stopped
     environment:
       ACCEPT_EULA: "Y"
+      # Seq 2024.3+ refuses to start unless first-run auth is configured. For a
+      # local dev logs container, opt out of authentication (no login). For a
+      # shared/persistent instance set SEQ_FIRSTRUN_ADMINPASSWORD instead.
+      SEQ_FIRSTRUN_NOAUTHENTICATION: "true"
     ports:
       - "5341:80"
     volumes:
@@ -222,7 +226,9 @@ No volume here is intentional: Redis is used as a cache, so losing its contents 
 
 (remember to add `seq-data` to the top-level `volumes:`)
 
-**The `seq-data` volume is mandatory, not optional.** Seq keeps its Flare/LMDB storage in `/data`; without a persistent volume an unclean container shutdown (a plain `docker compose down`/recreate) corrupts that storage and Seq then crashes on the next start with an Autofac `StorageSubsystem` activation error. Pin a concrete version (not `latest`) for reproducible builds.
+**`SEQ_FIRSTRUN_NOAUTHENTICATION` is mandatory on current Seq images.** Since Seq 2024.3, a container started with only `ACCEPT_EULA` crashes on boot with an Autofac `SeqNode` activation error: *"No default admin password was supplied; set `firstRun.adminPassword`/`SEQ_FIRSTRUN_ADMINPASSWORD`, or opt out using `firstRun.noAuthentication`/`SEQ_FIRSTRUN_NOAUTHENTICATION`."* The dev template opts out of auth (logs UI with no login, matching the "none by default" Service URLs row). If you ever switch to `SEQ_FIRSTRUN_ADMINPASSWORD`, source it from `.env` and update the README credentials.
+
+**The `seq-data` volume is mandatory, not optional.** Seq keeps its Flare/LMDB storage in `/data`; without a persistent volume every restart loses the ingested logs. Pin a concrete version (not `latest`) for reproducible builds.
 
 Seq listens on **port 80** (UI + API + ingestion) and on **5341** (ingestion-only) inside the container; `5341:80` maps the host's `5341` to the container UI. So the Serilog `serverUrl` differs by where the api runs:
 

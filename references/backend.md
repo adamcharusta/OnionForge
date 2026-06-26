@@ -31,7 +31,8 @@ The generated repository follows a fixed layout (full map in [../templates/MANIF
     │   │   └── {Name}.Api/                # endpoints, middleware, DI composition, appsettings
     │   └── tests/
     │       ├── {Name}.UnitTests/          # xUnit + NSubstitute + FluentAssertions 7.x
-    │       └── {Name}.IntegrationTests/   # Testcontainers.MsSql + WebApplicationFactory
+    │       ├── {Name}.IntegrationTests/   # Testcontainers.MsSql + WebApplicationFactory
+    │       └── {Name}.ArchitectureTests/  # NetArchTest.Rules — Onion dependency rules (mandatory)
     └── web/                               # frontend — see frontend.md
 ```
 
@@ -124,6 +125,15 @@ and any extra project (e.g. a Worker) to `/src/`.
 - Health check: `/health` (+ a database check).
 - `appsettings.json` + `appsettings.Development.json` with the MSSQL connection string matching docker-compose.
 
+## Scheduled & background jobs
+
+When the analysis selects a scheduler (**Hangfire**, **Quartz.NET** or a custom `BackgroundService`) and the app has recurring/cyclical work, the **schedule is configuration, never hardcoded**:
+
+- Put each recurring job's **cron expression** (or interval) in `appsettings.json` under a `Jobs`/`Scheduling` section, with a developer-friendly default, and let it be overridden by an environment variable in docker-compose (`Jobs__<JobName>__Cron`, sourced from `.env`). Register the recurring jobs by reading those values, e.g. `RecurringJob.AddOrUpdate(name, () => ..., cron)` for Hangfire or a `CronScheduleBuilder` for Quartz.
+- Document every job's config key and its `.env` variable in `.env.example` and `docs/development.md`, so the schedule (and enabling/disabling a job) can be changed without recompiling.
+- Use standard cron syntax and note in the docs which dialect/timezone applies (Hangfire and Quartz differ — Quartz uses a 6/7-field cron and an explicit timezone; state the one in use).
+- Hangfire's dashboard counts as a tool UI — expose it in Development per the Api rules (with the explicit Development authorization filter so it opens from the host browser).
+
 ## Docker
 
 - Root `docker-compose.yml` (template: `../templates/root/docker-compose.yml`) runs the **whole project**: MSSQL with a healthcheck, the API (built from `source/api/Dockerfile`) and the web frontend (built from `source/web/Dockerfile`). If RabbitMQ, Redis, Seq or a local SonarQube was chosen — append the services from the snippets in MANIFEST.md.
@@ -186,3 +196,18 @@ Every subproject is Sonar-ready:
 
 - **Testcontainers.MsSql** + `WebApplicationFactory<Program>` — a ready-made fixture including the collection definition (the container starts once per run): [../templates/backend/tests/IntegrationTests/ApiFactory.cs](../templates/backend/tests/IntegrationTests/ApiFactory.cs).
 - Endpoint tests for the example feature via `HttpClient` (happy path + validation 400).
+
+### ArchitectureTests (mandatory)
+
+Architecture tests are **required in every generated backend and every generation mode** — they keep the Onion dependency rules enforceable over the project's life. Use **NetArchTest.Rules** (MIT) by default, or reflection-based assertions if that fits the template better; pick one approach and stay consistent. They must assert at least:
+
+- `Domain` does not reference `Application`, `Infrastructure` or `Api`.
+- `Application` does not reference `Infrastructure` or `Api`.
+- `Infrastructure` does not reference `Api`.
+- `Api` may reference `Application` and `Infrastructure` (assert the inverse rules above, not this one).
+- Endpoints/controllers live only in the `Api` layer.
+- `DbContext` lives only in `Infrastructure`.
+- Repository implementations live only in `Infrastructure`.
+- Business logic (handlers/use cases) does not live in controllers/endpoints.
+
+These run under `dotnet test` alongside the unit and integration tests. The full rationale and the cross-mode rule live in [../.agents/skills/onionforge/SKILL.md](../.agents/skills/onionforge/SKILL.md) (*Architecture tests*).
